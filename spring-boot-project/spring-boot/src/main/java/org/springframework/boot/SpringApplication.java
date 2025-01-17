@@ -205,6 +205,7 @@ public class SpringApplication {
 
 	private static final ThreadLocal<SpringApplicationHook> applicationHook = new ThreadLocal<>();
 
+	// 启动springboot应用的主类
 	private final Set<Class<?>> primarySources;
 
 	private Class<?> mainApplicationClass;
@@ -223,6 +224,7 @@ public class SpringApplication {
 
 	private boolean headless = true;
 
+	// 应用上下文初始化器
 	private List<ApplicationContextInitializer<?>> initializers;
 
 	private List<ApplicationListener<?>> listeners;
@@ -267,16 +269,22 @@ public class SpringApplication {
 	 * @see #run(Class, String[])
 	 * @see #setSources(Set)
 	 */
+	// 初始化SpringApplication对象的核心属性，设置启动需要的初始化器和监听器
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
 		this.resourceLoader = resourceLoader;
 		Assert.notNull(primarySources, "PrimarySources must not be null");
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
 		this.properties.setWebApplicationType(WebApplicationType.deduceFromClasspath());
+		// 从 META-INF/spring.factories 文件中加载 BootstrapRegistryInitializer 类型的实现类，并将其存储为列表，允许在应用上下文加载之前对引导注册表进行自定义配置
 		this.bootstrapRegistryInitializers = new ArrayList<>(
 				getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+		// 从 META-INF/spring.factories 文件中加载 ApplicationContextInitializer 类型的实现类，并设置为应用上下文初始化器，用于在 ApplicationContext 刷新之前进行自定义初始化
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+		// 从 META-INF/spring.factories 文件中加载 ApplicationListener 类型的实现类，并将其注册为事件监听器，用于监听 Spring 应用生命周期中的事件（如 ApplicationStartedEvent、ApplicationReadyEvent 等）
+		// 这里加载的是全局的事件监听器
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+		// 通过检查调用栈找到包含 main 方法的类，通常用于在日志或异常处理中显示应用的主类信息。
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
 
@@ -300,17 +308,26 @@ public class SpringApplication {
 	 */
 	public ConfigurableApplicationContext run(String... args) {
 		Startup startup = Startup.create();
+		// spring 是否允许关闭钩子注册，默认是允许
 		if (this.properties.isRegisterShutdownHook()) {
 			SpringApplication.shutdownHook.enableShutdownHookAddition();
 		}
+		// 启动过程中用来管理启动上下文和相关信息的对象，通常会初始化启动时必须的资源
 		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
+		// spring 的核心，管理 Bean 的生命周期、配置、依赖注入等功能，ConfigurableApplicationContext允许修改上下文配置
 		ConfigurableApplicationContext context = null;
+		// 设置无头配置
 		configureHeadlessProperty();
+		// 获取启动监听器实例，从 META-INF/spring.factories 文件加载的 SpringApplicationRunListener 实现类
+		// 主要用于监听应用的启动阶段
 		SpringApplicationRunListeners listeners = getRunListeners(args);
+		// 触发监听器的start方法，表示容器开始启动
 		listeners.starting(bootstrapContext, this.mainApplicationClass);
 		try {
+			// 将args封装成ApplicationArguments对象
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
 			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
+			// 打印banner
 			Banner printedBanner = printBanner(environment);
 			context = createApplicationContext();
 			context.setApplicationStartup(this.applicationStartup);
@@ -348,9 +365,13 @@ public class SpringApplication {
 			DefaultBootstrapContext bootstrapContext, ApplicationArguments applicationArguments) {
 		// Create and configure the environment
 		ConfigurableEnvironment environment = getOrCreateEnvironment();
+		// 初步配置environment，主要处理 命令行参数 和 默认属性 的添加和合并
 		configureEnvironment(environment, applicationArguments.getSourceArgs());
+		// 添加配置源
 		ConfigurationPropertySources.attach(environment);
+		// 触发监听器的environmentPrepared方法，表示环境准备完成
 		listeners.environmentPrepared(bootstrapContext, environment);
+		// 后面是调整一些顺序
 		ApplicationInfoPropertySource.moveToEnd(environment);
 		DefaultPropertiesPropertySource.moveToEnd(environment);
 		Assert.state(!environment.containsProperty("spring.main.environment-prefix"),
@@ -377,9 +398,13 @@ public class SpringApplication {
 	private void prepareContext(DefaultBootstrapContext bootstrapContext, ConfigurableApplicationContext context,
 			ConfigurableEnvironment environment, SpringApplicationRunListeners listeners,
 			ApplicationArguments applicationArguments, Banner printedBanner) {
+		// 将准备好的environment设置到上下文中
 		context.setEnvironment(environment);
+		// 提供了对上下文的自定义配置的能力，允许子类在应用上下文刷新之前增加额外的逻辑，比如：注册自定义beanName生成器、设置资源加载器、配置转换服务
 		postProcessApplicationContext(context);
+		// AOT相关的处理
 		addAotGeneratedInitializerIfNecessary(this.initializers);
+		// 调用应用上下文初始化器，在初始化器中可以对上下文进行进一步配置
 		applyInitializers(context);
 		listeners.contextPrepared(context);
 		bootstrapContext.close(context);
@@ -390,22 +415,27 @@ public class SpringApplication {
 		}
 		// Add boot specific singleton beans
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+		// 注册命令行参数的bean和banner，以便可以通过依赖注入随时访问
 		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
 		if (printedBanner != null) {
 			beanFactory.registerSingleton("springBootBanner", printedBanner);
 		}
+		// 设置bean是否支持循环引用和bean定义覆盖
 		if (beanFactory instanceof AbstractAutowireCapableBeanFactory autowireCapableBeanFactory) {
 			autowireCapableBeanFactory.setAllowCircularReferences(this.properties.isAllowCircularReferences());
 			if (beanFactory instanceof DefaultListableBeanFactory listableBeanFactory) {
 				listableBeanFactory.setAllowBeanDefinitionOverriding(this.properties.isAllowBeanDefinitionOverriding());
 			}
 		}
+		// 如果是懒加载，注册一个BeanFactoryPostProcessor，用于处理懒加载
 		if (this.properties.isLazyInitialization()) {
 			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 		}
 		if (this.properties.isKeepAlive()) {
+			// 注册KeepAlive 监听器，可能用于防止应用意外退出
 			context.addApplicationListener(new KeepAlive());
 		}
+		// 注册 PropertySourceOrderingBeanFactoryPostProcessor，用于调整属性源的优先级顺序
 		context.addBeanFactoryPostProcessor(new PropertySourceOrderingBeanFactoryPostProcessor(context));
 		if (!AotDetector.useGeneratedArtifacts()) {
 			// Load the sources
@@ -493,6 +523,7 @@ public class SpringApplication {
 		if (this.addConversionService) {
 			environment.setConversionService(new ApplicationConversionService());
 		}
+		// 处理 命令行参数 和 默认属性 的添加和合并
 		configurePropertySources(environment, args);
 		configureProfiles(environment, args);
 	}
@@ -1741,6 +1772,8 @@ public class SpringApplication {
 
 		static Startup create() {
 			ClassLoader classLoader = Startup.class.getClassLoader();
+			// 判断是否支持CRaC功能，CoordinatedRestoreAtCheckpointStartup用于支持CRaC技术的场景，会额外增加一些钩子逻辑
+			// StandardStartup用于普通场景，不涉及检查点或恢复的额外逻辑
 			return (ClassUtils.isPresent("jdk.crac.management.CRaCMXBean", classLoader)
 					&& ClassUtils.isPresent("org.crac.management.CRaCMXBean", classLoader))
 							? new CoordinatedRestoreAtCheckpointStartup() : new StandardStartup();

@@ -78,6 +78,7 @@ class ApplicationProperties {
 	 * Flag to explicitly request a specific type of web application. If not set,
 	 * auto-detected based on the classpath.
 	 */
+	// 应用类型，根据对应的类存不存在，而推断应用类型
 	private WebApplicationType webApplicationType;
 
 	boolean isAllowBeanDefinitionOverriding() {

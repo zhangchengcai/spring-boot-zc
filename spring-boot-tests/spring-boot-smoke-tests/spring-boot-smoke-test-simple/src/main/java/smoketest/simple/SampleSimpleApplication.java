@@ -24,6 +24,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
+/**
+ *  How does Spring Boot start?
+ * Question: What happens when you call SpringApplication.run()?
+ * Key Points: Explain the process behind initializing the application context, loading beans,
+ * handling command-line arguments, and enabling auto-configuration.
+ */
 @SpringBootApplication
 @EnableConfigurationProperties(SampleConfigurationProperties.class)
 public class SampleSimpleApplication implements CommandLineRunner {
